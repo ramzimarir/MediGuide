@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MediGuide - Assistant</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'], serif: ['Lora', 'serif'] },
+          colors: {
+            brand: { 50: '#f0f7ff', 100: '#e0effe', 500: '#3b82f6', 600: '#2563eb', 900: '#1e3a8a' },
+            surface: { 50: '#f8fafc', 100: '#f1f5f9' }
+          },
+          boxShadow: { 'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)' }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body { background-color: #f1f5f9; }
+    .clinical-paper { background: #fff; box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.06); border: 1px solid #e2e8f0; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    .btn-pulse { animation: pulse-ring 2s infinite; }
+    .history-item.active { background-color: #eff6ff; border-color: #3b82f6; }
+
+    .drawer { transition: transform 0.3s ease-in-out; }
+    .drawer-closed { transform: translateX(-100%); }
+    .drawer-open { transform: translateX(0); }
+    .overlay { transition: opacity 0.3s ease-in-out; }
+
+    /* New: Resizer styling */
+    .resizer-handle {
+        height: 12px;
+        cursor: row-resize;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+        flex-shrink: 0; /* Prevent bar collapse */
+    }
+    .resizer-handle:hover { background-color: #e2e8f0; }
+    .resizer-line { width: 40px; height: 4px; background-color: #cbd5e1; border-radius: 2px; }
+  </style>
+</head>
+<body class="text-slate-600 font-sans h-screen flex flex-col overflow-hidden selection:bg-brand-100 selection:text-brand-900"> 
+
+  <!-- MODAL OVERLAY -->
+  <div id="drawerOverlay" class="fixed inset-0 bg-slate-900/50 z-[60] hidden opacity-0 transition-opacity backdrop-blur-sm"></div>
+  
+  <!-- NEW PATIENT FORM MODAL -->
+  <div id="newPatientModal" class="fixed inset-0 z-[80] hidden flex items-center justify-center">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <!-- Header -->
+      <div class="sticky top-0 bg-brand-600 text-white px-8 py-6 flex justify-between items-center">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><i class="fa-solid fa-file-medical"></i> Créer un nouveau dossier</h2>
+        <button id="closeNewPatientModalBtn" class="text-white/80 hover:text-white transition"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      
+      <!-- Form -->
+      <form id="newPatientForm" class="p-8 space-y-6">
+        <!-- VISIT TYPE -->
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-3">Type de visite *</label>
+          <select name="visitType" class="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700" required>
+            <option value="consultation" class="text-blue-700">📋 Consultation</option>
+            <option value="urgence" class="text-red-700">🚨 Urgence</option>
+            <option value="suivi" class="text-green-700">✅ Suivi</option>
+            <option value="autre" class="text-amber-700">❓ Autre</option>
+          </select>
+        </div>
+
+        <!-- SECTION 1: IDENTIFICATION (REQUIRED) -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> Identification du patient *</h3>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Prénom *</label>
+              <input type="text" name="firstName" placeholder="Ex: Jean" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" required />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Nom *</label>
+              <input type="text" name="lastName" placeholder="Ex: Dupont" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" required />
+            </div>
+          </div>
+          
+          <div class="mt-4">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Mode de date *</label>
+            <div class="flex gap-2">
+              <label class="flex-1 flex items-center p-2 border-2 border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition">
+                <input type="radio" name="dateMode" value="birthdate" checked class="w-4 h-4 text-brand-600" />
+                <span class="ml-2 text-xs font-medium text-slate-700">Date de naissance</span>
+              </label>
+              <label class="flex-1 flex items-center p-2 border-2 border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition">
+                <input type="radio" name="dateMode" value="age" class="w-4 h-4 text-brand-600" />
+                <span class="ml-2 text-xs font-medium text-slate-700">Âge</span>
+              </label>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4 mt-4">
+            <div id="dateOfBirthWrapper">
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Date de naissance *</label>
+              <input type="date" id="dateOfBirthInput" name="dateOfBirth" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" required />
+            </div>
+            <div id="ageInputWrapper" class="hidden">
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Âge (ans) *</label>
+              <input type="number" id="ageInput" name="age" min="0" max="150" placeholder="Ex: 35" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Sexe *</label>
+              <select name="gender" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" required>
+                <option value="">-- Sélectionner --</option>
+                <option value="male">Mâle</option>
+                <option value="female">Femelle</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 1.5: OPTIONAL NOTE -->
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-sticky-note text-amber-600"></i> Note sur le patient (Optionnel)</h3>
+          <textarea name="clinicalNote" placeholder="Ex: Patiente enceinte (3e trimestre), antécédents chirurgicaux importants, etc." rows="3" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+        </div>
+
+        <!-- SECTION 2: CONTACT (OPTIONAL) -->
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4">Contact (Optionnel)</h3>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Téléphone</label>
+              <input type="tel" name="phone" placeholder="Ex: 06 12 34 56 78" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Email</label>
+              <input type="email" name="email" placeholder="Ex: patient@email.com" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3: MEDICAL CONTEXT (OPTIONAL) -->
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4">Contexte médical (Optionnel)</h3>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Allergies</label>
+            <textarea name="allergies" placeholder="Ex: Pénicilline, Cacahuètes..." rows="2" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Antécédents médicaux</label>
+            <textarea name="medicalHistory" placeholder="Ex: Diabète, Hypertension..." rows="2" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Traitement actuel</label>
+            <textarea name="currentTreatment" placeholder="Ex: Metformine 500mg x 2/jour..." rows="2" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+          </div>
+        </div>
+
+        <!-- SECTION 4: ADMINISTRATIVE (OPTIONAL) -->
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4">Référence administrative (Optionnel)</h3>
+          
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Numéro de dossier / Numéro de sécurité sociale</label>
+            <input type="text" name="referenceNumber" placeholder="Ex: 12345678901234" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="flex gap-3 pt-6 border-t border-slate-200">
+          <button type="button" id="cancelNewPatientBtn" class="flex-1 px-4 py-3 border border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition">
+            Annuler
+          </button>
+          <button type="submit" class="flex-1 px-4 py-3 bg-brand-600 text-white font-semibold rounded-lg hover:bg-brand-700 transition shadow-lg">
+            Créer le dossier
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="patientDrawer" class="fixed top-0 left-0 h-full w-80 bg-white shadow-2xl z-[70] drawer drawer-closed flex flex-col">
+    <div class="p-6 bg-brand-600 text-white flex justify-between items-center">
+        <h2 class="font-bold text-lg"><i class="fa-solid fa-users-medical mr-2"></i>Patients</h2>
+        <button id="closeDrawerBtn" class="text-white/80 hover:text-white transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div class="p-4 border-b border-slate-100 bg-slate-50">
+        <button id="openNewPatientModalBtn" class="w-full h-12 bg-gradient-to-br from-brand-500 to-brand-600 hover:to-brand-700 text-white font-bold rounded-lg transition shadow-md hover:shadow-lg flex items-center justify-center gap-2">
+            <i class="fa-solid fa-user-plus"></i> Nouveau Dossier
+        </button>
+    </div>
+    <div class="flex-grow overflow-y-auto p-4 space-y-2" id="patientsList">
+        <div class="text-center text-slate-400 text-sm mt-10">Chargement...</div>
+    </div>
+  </div>
+
+  <nav class="bg-white border-b border-slate-200 h-16 flex-none z-50 px-6 shadow-sm">
+    <div class="max-w-screen-2xl mx-auto h-full flex justify-between items-center">
+      <div class="flex items-center space-x-4">
+        <button id="openDrawerBtn" class="p-2 -ml-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"><i class="fa-solid fa-bars text-xl"></i></button>
+        <div class="flex items-center space-x-3 border-l border-slate-200 pl-4">
+          <div class="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white shadow-brand-500/30"><i class="fa-solid fa-staff-snake"></i></div>
+          <div><h1 class="font-bold text-lg text-slate-800 tracking-tight">MediGuide</h1></div>
+        </div>
+      </div>
+      <div class="flex items-center space-x-4">
+        <div id="activePatientBadge" class="hidden md:flex items-center px-4 py-1.5 bg-brand-50 border border-brand-100 rounded-full cursor-pointer hover:bg-brand-100 transition">
+            <i class="fa-regular fa-id-card text-brand-500 mr-2"></i>
+            <span id="activePatientName" class="text-sm font-bold text-brand-700">Aucun patient sélectionné</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="flex-grow w-full max-w-screen-2xl mx-auto p-4 md:p-6 h-[calc(100vh-4rem)]">
+    
+    <div id="noPatientOverlay" class="absolute inset-0 bg-white/60 z-40 backdrop-blur-[2px] flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 text-center max-w-md">
+            <div class="w-16 h-16 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i class="fa-solid fa-user-plus"></i></div>
+            <h2 class="text-xl font-bold text-slate-800 mb-2">Sélectionnez un patient</h2>
+            <p class="text-slate-500 mb-6">Pour commencer, veuillez sélectionner ou créer un dossier patient.</p>
+            <button onclick="document.getElementById('openDrawerBtn').click()" class="bg-brand-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-brand-700 transition shadow-lg shadow-brand-500/20">Ouvrir la liste des patients</button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+      
+      <div id="leftColumnContainer" class="lg:col-span-8 h-full flex flex-col min-h-0">
+          
+          <div id="topPanel" class="clinical-paper rounded-xl flex flex-col overflow-hidden relative" style="height: 60%;">
+            <div class="px-6 py-4 border-b border-slate-100 bg-white z-10 flex justify-between items-center flex-none">
+              <div>
+                <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <i class="fa-regular fa-file-lines text-brand-500"></i>
+                  <input id="noteTitleInput" type="text" value="" placeholder="Titre de la note" class="font-bold text-brand-700 bg-transparent border-none focus:ring-0 focus:outline-none p-0 m-0 text-base w-auto max-w-xs" style="min-width:80px;" />
+                </h2>
+                <span id="currentDate" class="text-xs text-slate-400 mt-0.5 block">--/--/----</span>
+              </div>
+              <div class="flex gap-2">
+                <button id="toggleViewBtn" class="px-3 py-1.5 text-xs font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition flex items-center gap-2 border border-brand-100" title="Voir Propre / Filtré">
+                  <i class="fa-regular fa-eye"></i> <span id="toggleBtnLabel">Filtré</span>
+                </button>
+                <button id="toggleDirtyBtn" class="px-2 py-1 text-[10px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition border border-slate-200" title="Afficher le texte sale">
+                  <i class="fa-solid fa-bug"></i>
+                </button>
+                <button id="copyBtn" class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded transition" title="Copier"><i class="fa-regular fa-copy"></i></button>
+              </div>
+            </div>
+            <div class="p-8 flex-grow overflow-y-auto scrollbar-hide bg-white relative">
+              <div id="result" class="relative z-10 w-full text-slate-800 text-lg leading-loose font-serif whitespace-pre-wrap outline-none pb-10">
+                <span class="text-slate-300 font-sans text-base italic flex items-center gap-2 select-none">
+                  <i class="fa-solid fa-arrow-turn-up -rotate-90 text-slate-200"></i>
+                  Le texte s'affichera ici...
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div id="dragHandle" class="resizer-handle w-full group" title="Ajuster la hauteur">
+              <div class="resizer-line group-hover:bg-brand-300 transition-colors"></div>
+          </div>
+
+          <div id="bottomPanel" class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden relative min-h-0">
+              <div class="px-5 py-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center flex-none">
+                  <h3 class="text-xs font-bold text-brand-600 uppercase tracking-widest flex items-center gap-2">
+                      <i class="fa-solid fa-sparkles"></i> Assistant IA & RAG
+                  </h3>
+                  <span class="text-[10px] bg-white border border-slate-200 text-slate-400 px-2 py-0.5 rounded-full">En attente</span>
+              </div>
+              <div id="ragResults" class="p-4 overflow-y-auto scrollbar-hide bg-white h-full relative">
+                  <div id="ragPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                      <div class="mb-4 bg-brand-50 p-3 rounded-full text-brand-500"><i class="fa-solid fa-robot text-2xl"></i></div>
+                      <p class="text-xs text-center max-w-xs mb-4">Sélectionnez les notes, puis lancez l'analyse.</p>
+                      <button id="btnLaunchRag" class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm transition-all flex items-center gap-2">
+                          <i class="fa-solid fa-bolt"></i> Lancer l'analyse RAG
+                      </button>
+                  </div>
+                  <div id="ragContent" class="space-y-3 hidden"></div>
+              </div>
+          </div>
+
+      </div>
+<div class="lg:col-span-4 h-full flex flex-col gap-4 min-h-0">
+        
+        <div class="bg-white rounded-xl shadow-soft border border-slate-100 p-3 flex-none relative overflow-hidden group">
+          <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-500 to-cyan-400"></div>
+          
+          <div class="text-center mb-3">
+            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Dictée Vocale</h3>
+            <div class="flex items-center justify-center gap-2">
+              <span id="statusIndicator" class="w-2 h-2 rounded-full bg-slate-300"></span>
+              <p id="status" class="text-[10px] text-slate-400">Microphone prêt</p>
+            </div>
+          </div>
+
+          <button id="startBtn" class="w-full h-12 rounded-xl flex items-center justify-between px-4 bg-gradient-to-br from-brand-500 to-brand-600 hover:to-brand-700 text-white shadow-lg shadow-brand-500/30 transition-all cursor-pointer hover:scale-[1.01]">
+            <div class="flex flex-col text-left">
+                <span class="font-bold text-base">Démarrer</span>
+                <span class="text-[10px] text-brand-100 opacity-90">Nouvelle note</span>
+            </div>
+            <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                <i class="fa-solid fa-microphone text-lg"></i>
+            </div>
+          </button>
+
+          <button id="stopBtn" class="hidden w-full h-12 rounded-xl items-center justify-between px-4 bg-white border-2 border-red-100 text-red-600 hover:bg-red-50 transition-all cursor-pointer relative overflow-hidden">
+             <div class="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                 <div class="w-32 h-32 bg-red-500 rounded-full btn-pulse"></div>
+             </div>
+             <div class="flex flex-col text-left z-10">
+                 <span class="font-bold text-base">Terminer</span>
+                 <span class="text-[10px] text-red-400">Analyser</span>
+             </div>
+            <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center z-10">
+                <i class="fa-solid fa-stop text-lg"></i>
+            </div>
+          </button>
+
+          <div id="visualizer" class="mt-3 flex justify-center items-end space-x-1 h-6 opacity-50">
+             <div class="wave-bar w-1 h-1 bg-slate-300 rounded-full"></div>
+             <div class="wave-bar w-1 h-1 bg-slate-300 rounded-full"></div>
+             <div class="wave-bar w-1 h-1 bg-slate-300 rounded-full"></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-soft border border-slate-100 flex flex-col flex-grow min-h-0 overflow-hidden">
+          <div class="px-5 py-3 border-b border-slate-50 flex justify-between items-center bg-white z-10">
+            <div class="flex items-center gap-2">
+                    <input type="checkbox" id="selectAllHistory" class="w-3.5 h-3.5 text-brand-600 rounded border-slate-300 focus:ring-brand-500 cursor-pointer" title="Tout sélectionner">
+              <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center select-none">
+                <i class="fa-solid fa-clock-rotate-left mr-2 text-slate-400"></i> Historique
+              </h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="openFilterModalBtn" class="text-[10px] font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 rounded px-2 py-1 border border-brand-100">Filtrer</button>
+              <span id="historyCount" class="bg-brand-50 text-brand-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-brand-100">0</span>
+            </div>
+          </div>
+
+          <div class="px-4 py-2 border-b border-slate-50 bg-white">
+            <input id="historySearchInput" type="text" placeholder="Recherche rapide (mot-clé)" class="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+            
+            <div id="localHistoryList" class="p-3 space-y-2 overflow-y-auto flex-grow scrollbar-hide bg-surface-50">
+                <div id="emptyHistoryMsg" class="flex flex-col items-center justify-center h-full text-slate-300 py-10">
+                    <i class="fa-regular fa-folder-open text-3xl mb-3 opacity-50"></i>
+                    <p class="text-xs italic">Aucune note pour le moment</p>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- EDIT PATIENT MODAL -->
+  <div id="editPatientModal" class="fixed inset-0 z-[80] hidden flex items-center justify-center">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <!-- Header -->
+      <div class="sticky top-0 bg-gradient-to-r from-slate-600 to-slate-700 text-white px-8 py-6 flex justify-between items-center">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><i class="fa-solid fa-user-pen"></i> Modifier le dossier patient</h2>
+        <button id="closeEditPatientModalBtn" class="text-white/80 hover:text-white transition"><i class="fa-solid fa-xmark text-2xl"></i></button>
+      </div>
+      
+      <!-- Form -->
+      <form id="editPatientForm" class="p-8 space-y-6">
+        <!-- VISIT TYPE -->
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-3">Type de visite *</label>
+          <select name="visitType" class="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-slate-700" required>
+            <option value="consultation">📋 Consultation</option>
+            <option value="urgence">🚨 Urgence</option>
+            <option value="suivi">✅ Suivi</option>
+            <option value="autre">❓ Autre</option>
+          </select>
+        </div>
+
+        <!-- SECTION 1: IDENTIFICATION (READ-ONLY) -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> Identification du patient (non-modifiable)</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Prénom</label>
+              <input type="text" id="editFirstName" disabled class="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg text-slate-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Nom</label>
+              <input type="text" id="editLastName" disabled class="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg text-slate-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Sexe</label>
+              <input type="text" id="editGender" disabled class="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg text-slate-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">Date de naissance</label>
+              <input type="date" id="editDateOfBirth" name="dateOfBirth" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 1.5: OPTIONAL NOTE -->
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-sticky-note text-amber-600"></i> Note sur le patient (Optionnel)</h3>
+          <textarea name="clinicalNote" id="editClinicalNote" placeholder="Ex: Patiente enceinte (3e trimestre), antécédents chirurgicaux importants, etc." rows="3" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+        </div>
+
+        <!-- SECTION 3: MEDICAL CONTEXT (OPTIONAL) -->
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4">Contexte médical (Optionnel)</h3>
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Allergies</label>
+            <textarea name="allergies" id="editAllergies" placeholder="Ex: Pénicilline, Cacahuètes..." rows="2" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Antécédents médicaux</label>
+            <textarea name="medicalHistory" id="editMedicalHistory" placeholder="Ex: Diabète, Hypertension..." rows="2" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Traitement actuel</label>
+            <textarea name="currentTreatment" id="editCurrentTreatment" placeholder="Ex: Metformine 500mg x 2/jour..." rows="2" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+          </div>
+        </div>
+
+        <!-- SECTION 4: ADMINISTRATIVE (OPTIONAL) -->
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h3 class="font-bold text-slate-800 mb-4">Référence administrative (Optionnel)</h3>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Numéro de dossier / Numéro de sécurité sociale</label>
+            <input type="text" name="referenceNumber" id="editReferenceNumber" placeholder="Ex: 12345678901234" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="flex gap-3 pt-6 border-t border-slate-200">
+          <button type="button" id="deletePatientBtn" class="px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition shadow-lg">
+            <i class="fa-solid fa-trash mr-2"></i> Supprimer le dossier
+          </button>
+          <button type="button" id="cancelEditPatientBtn" class="flex-1 px-4 py-3 border border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition">
+            Annuler
+          </button>
+          <button type="submit" id="applyPatientChangesBtn" class="flex-1 px-4 py-3 bg-slate-400 text-white font-semibold rounded-lg transition shadow-lg cursor-not-allowed" disabled>
+            Appliquer modifications
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- NOTE FILTER MODAL -->
+  <div id="filterNotesModal" class="fixed inset-0 z-[90] hidden items-center justify-center">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-white flex justify-between items-center">
+        <h3 class="text-sm font-bold text-slate-800">Filtrer les notes</h3>
+        <button id="closeFilterModalBtn" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="p-4 border-b border-slate-100 flex flex-wrap items-center gap-2">
+        <input id="filterSearchInput" type="text" placeholder="Recherche rapide (mot-clé)" class="px-3 py-1.5 border border-slate-200 rounded text-xs w-full sm:w-64" />
+        <select id="filterYearSelect" class="px-2 py-1 border border-slate-200 rounded text-xs">
+          <option value="all">Toutes les années</option>
+        </select>
+        <select id="filterMonthSelect" class="px-2 py-1 border border-slate-200 rounded text-xs">
+          <option value="all">Tous les mois</option>
+          <option value="1">Janvier</option>
+          <option value="2">Février</option>
+          <option value="3">Mars</option>
+          <option value="4">Avril</option>
+          <option value="5">Mai</option>
+          <option value="6">Juin</option>
+          <option value="7">Juillet</option>
+          <option value="8">Août</option>
+          <option value="9">Septembre</option>
+          <option value="10">Octobre</option>
+          <option value="11">Novembre</option>
+          <option value="12">Décembre</option>
+        </select>
+        <span id="selectedNotesCount" class="ml-auto text-[10px] text-slate-500">0 notes sélectionnées</span>
+        <button id="toggleSelectNotesBtn" class="text-[10px] font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 rounded px-2 py-1 border border-brand-100">Tout sélectionner</button>
+      </div>
+      <div id="filterNotesList" class="p-4 space-y-2 overflow-y-auto max-h-[60vh]"></div>
+    </div>
+  </div>
+
+  <!-- NOTE DETAIL MODAL -->
+  <div id="noteDetailModal" class="fixed inset-0 z-[95] hidden items-center justify-center">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[80vh] overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-white flex justify-between items-center">
+        <h3 class="text-sm font-bold text-slate-800">Détails de la note</h3>
+        <button id="closeNoteDetailModalBtn" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-3">
+          <div id="noteDetailDate" class="font-bold text-slate-800"></div>
+          <div class="flex items-center gap-1">
+            <button id="detailViewSummaryBtn" class="text-[10px] font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 rounded px-2 py-1 border border-brand-100">Résumé</button>
+            <button id="detailViewRawBtn" class="text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 border border-slate-200">Brut</button>
+            <button id="detailViewFilteredBtn" class="text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 border border-slate-200">Filtré</button>
+          </div>
+        </div>
+        <div id="noteDetailContent" class="text-sm text-slate-700 max-h-[45vh] overflow-y-auto pr-2"></div>
+        <div class="mt-4 flex items-center gap-2">
+          <input id="noteDetailCheckbox" type="checkbox" class="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500 cursor-pointer">
+          <label for="noteDetailCheckbox" class="text-xs text-slate-600">Inclure au RAG</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./static/client.js"></script>
+  <script>
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    document.getElementById('currentDate').textContent = new Date().toLocaleDateString('fr-FR', options);
+  </script>
+</body>
+</html>

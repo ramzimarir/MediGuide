@@ -1,0 +1,36 @@
+# Python generated files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.installed.cfg
+*.egg
+build/
+dist/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project specific
+.env
+db_recordings/
+logs/
+*.log
+
+# Data files too large for GitHub
+scripts/data/*.json
+frontend/static/*.min.js
+
+# Keep example environment template in repository
+!.env.example

@@ -1,0 +1,25 @@
+# Web framework
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+pydantic>=1.10,<2.0
+python-multipart==0.0.6
+jinja2==3.1.2
+
+# AI / ML
+torch>=1.13.0
+sentence-transformers==2.5.1
+fastembed==0.3.6
+groq>=0.9.0
+
+# Databases
+neo4j==5.14.1
+qdrant-client==1.9.1
+
+# Audio processing
+pydub==0.25.1
+
+# Utilities
+python-dotenv==1.0.1
+requests==2.31.0
+numpy>=1.23.0
+tqdm==4.66.2
