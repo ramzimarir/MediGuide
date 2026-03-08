@@ -7,6 +7,7 @@
 **Academic project** — M2 Artificial Intelligence & Data Science, UPEC Paris
 
 ![Interface Screenshot](docs/screenshot.png)
+<img width="862" height="475" alt="screenshot" src="https://github.com/user-attachments/assets/80c190e3-545d-4f36-a01c-1f0ad50352cb" />
 
 ---
 
